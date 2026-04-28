@@ -1,0 +1,25 @@
+{
+  "name": "amazon-automation-assignment",
+  "version": "1.0.0",
+  "description": "Amazon automation assignment using Playwright and JavaScript",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed --workers=2",
+    "test:lambdatest": "set LT_CLOUD=1&& playwright test"
+  },
+  "keywords": [
+    "playwright",
+    "automation",
+    "amazon",
+    "lambdatest"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.2",
+    "@playwright/test": "^1.59.1",
+    "dotenv": "^17.4.2"
+  }
+}

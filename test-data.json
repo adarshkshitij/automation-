@@ -1,0 +1,12 @@
+{
+  "testData": [
+    {
+      "searchTerms": ["iPhone 15", "iPhone 14", "iPhone"],
+      "label": "Case 1"
+    },
+    {
+      "searchTerms": ["Samsung Galaxy S24", "Samsung Galaxy S23", "Galaxy"],
+      "label": "Case 2"
+    }
+  ]
+}
