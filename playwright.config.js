@@ -53,11 +53,11 @@ module.exports = defineConfig({
   use: {
     baseURL: "https://www.amazon.com",
     headless: true,
-    trace: "on",
-    screenshot: "on",
-    video: "on-first-retry",
-    actionTimeout: 15000,
-    navigationTimeout: 30000,
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    video: "retain-on-failure",
+    actionTimeout: 20000,
+    navigationTimeout: 45000,
     locale: "en-US",
     timezoneId: "America/New_York",
     userAgent:

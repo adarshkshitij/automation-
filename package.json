@@ -6,7 +6,8 @@
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed --workers=2",
-    "test:lambdatest": "set LT_CLOUD=1&& playwright test"
+    "test:lambdatest": "set LT_CLOUD=1&& playwright test",
+    "lint": "eslint ."
   },
   "keywords": [
     "playwright",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.11.2",
     "@playwright/test": "^1.59.1",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "eslint": "^9.1.0"
   }
 }
