@@ -1,26 +1,20 @@
-# Amazon Automation - Enterprise Grade Suite
+# 🚀 Amazon Automation Suite - Enterprise Grade
 
-This project is a high-performance, resilient automation suite built with Playwright. It was designed to demonstrate best practices in Quality Engineering, specifically for the Customer Engineering role at TestMu AI.
+Professional automation suite developed for the **TestMu AI (LambdaTest) Customer Engineering Internship** assignment. This project demonstrates high-fidelity automation practices, emphasizing resilience, accessibility, and observability.
 
-- **Page Object Model (POM)**: Scalable architecture separating selectors and actions into dedicated page classes.
-- **Data-Driven Testing**: Dynamically generates test cases from `test-data.json`.
-- **Parallel Execution**: Configured for 4 concurrent workers, significantly reducing total test time.
-- **Robustness & Self-Healing**: 
-    - Intelligent location management (forces US ZIP `10001` for consistent inventory).
-    - Multi-candidate retry logic: Automatically skips items with shipping restrictions or out-of-stock status.
-- **CI/CD Integrated**: Automated GitHub Actions pipeline that runs tests on every push and records results.
-- **Full Observability**: Captures Screenshots, Traces, and Videos for every test run to facilitate seamless debugging and review.
-- **Accessibility Compliance**: Integrated `@axe-core/playwright` for automated WCAG auditing.
+## 🏗️ Technical Architecture
 
-- `pages/AmazonPage.js`: Page Object defining all selectors and core interactions.
-- `tests/amazon.spec.js`: Clean, descriptive test specifications.
-- `playwright.config.js`: Advanced reporting and parallel execution configuration.
-- `.github/workflows/`: CI/CD pipeline definition for automated execution.
-- `playwright-report/`: Detailed HTML reports with traces and screenshots.
+This suite is built using **Playwright (JavaScript)** and follows the **Page Object Model (POM)** pattern to ensure scalability and maintainability.
+
+### Key Engineering Features:
+*   **Parallel Execution**: Configured for 4 concurrent workers to maximize throughput without session collision.
+*   **Multi-Candidate Search Strategy**: Implements an intelligent search algorithm that tries multiple terms and evaluates several product candidates per term to bypass Amazon's regional inventory restrictions.
+*   **Deep Cart Verification**: Unlike basic scripts, this suite navigates to the actual cart page to verify product persistence and price accuracy between the Product Detail Page (PDP) and the Cart.
+*   **Automated Accessibility (A11y)**: Integrated `@axe-core/playwright` to perform non-blocking WCAG 2.1 compliance audits on every product page, saving violation reports for engineering review.
+*   **Resilient recovery**: Handles location popups, cookie consents, and "Rush Hour" interstitials using a custom recovery handler in the POM.
 
 ## 🛠️ Setup & Execution
 
-### Prerequisites
 - Node.js 18+
 
 ### Installation
