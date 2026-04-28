@@ -2,25 +2,21 @@
 
 This project is a high-performance, resilient automation suite built with Playwright. It was designed to demonstrate best practices in Quality Engineering, specifically for the Customer Engineering role at TestMu AI.
 
-## 🚀 Key Features
-
+- **Page Object Model (POM)**: Scalable architecture separating selectors and actions into dedicated page classes.
 - **Data-Driven Testing**: Dynamically generates test cases from `test-data.json`.
-- **Parallel Execution**: Optimized to run multiple scenarios concurrently, significantly reducing total test time.
+- **Parallel Execution**: Configured for 4 concurrent workers, significantly reducing total test time.
 - **Robustness & Self-Healing**: 
     - Intelligent location management (forces US ZIP `10001` for consistent inventory).
     - Multi-candidate retry logic: Automatically skips items with shipping restrictions or out-of-stock status.
-    - Interstitial recovery: Handles "Rush Hour" and "Continue Shopping" popups.
-- **Accessibility (A11y)**: Integrated `@axe-core/playwright` to perform automated WCAG 2.1 compliance audits on product pages.
-- **Performance Observability**: Custom metrics engine tracks the duration of each phase (Search, Selection, Cart-Add, Verification).
-- **CI/CD Ready**: Pre-configured GitHub Actions workflow for automated pipeline integration.
-- **Visual Evidence**: Automatic screenshot capture of the final cart state for manual verification.
+- **CI/CD Integrated**: Automated GitHub Actions pipeline that runs tests on every push and records results.
+- **Full Observability**: Captures Screenshots, Traces, and Videos for every test run to facilitate seamless debugging and review.
+- **Accessibility Compliance**: Integrated `@axe-core/playwright` for automated WCAG auditing.
 
-## 📁 Project Structure
-
-- `tests/amazon.spec.js`: Core test logic with advanced helper functions for resilience.
-- `playwright.config.js`: Advanced configuration including HTML reporting, retries, and browser emulation.
-- `.github/workflows/`: CI/CD pipeline definition.
-- `test-results/`: Local directory for screenshots, traces, and accessibility reports.
+- `pages/AmazonPage.js`: Page Object defining all selectors and core interactions.
+- `tests/amazon.spec.js`: Clean, descriptive test specifications.
+- `playwright.config.js`: Advanced reporting and parallel execution configuration.
+- `.github/workflows/`: CI/CD pipeline definition for automated execution.
+- `playwright-report/`: Detailed HTML reports with traces and screenshots.
 
 ## 🛠️ Setup & Execution
 
