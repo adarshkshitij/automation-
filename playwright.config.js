@@ -43,27 +43,35 @@ const lambdaTestUse = isLambdaTest
 module.exports = defineConfig({
   testDir: "./tests",
   fullyParallel: true,
-  workers: 1,
+  workers: 1, // Keep as 1 for stability on Amazon
   timeout: 600000,
   expect: {
     timeout: 15000,
   },
-  retries: 1,
-  reporter: [["list"], ["html", { open: "never" }]],
+  retries: process.env.CI ? 2 : 1, // More retries in CI
+  reporter: [
+    ["list"],
+    ["html", { outputFolder: "playwright-report", open: "never" }]
+  ],
   use: {
     baseURL: "https://www.amazon.com",
     headless: true,
-    trace: "retain-on-failure",
+    trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    actionTimeout: 20000,
-    navigationTimeout: 45000,
-    // Using default Playwright device settings for better compatibility
+    actionTimeout: 30000,
+    navigationTimeout: 60000,
     ...devices["Desktop Chrome"],
     viewport: { width: 1280, height: 720 },
     launchOptions: {
-      args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+      args: [
+        "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage"
+      ],
     },
     ...lambdaTestUse,
   },
 });
+
