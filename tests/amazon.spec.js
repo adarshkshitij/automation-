@@ -41,7 +41,14 @@ test.describe("Amazon Product Workflow - Enterprise Suite", () => {
           }
 
           await amazon.searchProduct(term);
-          await page.waitForTimeout(2000); // Buffer for location-based search results
+          await page.waitForTimeout(2000);
+
+          // Mandatory Accessibility Audit - Run once per search page to save time
+          const a11yTimeout = 40000;
+          await Promise.race([
+            runA11yAudit(page, data.label, term),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("A11y Audit Timeout")), a11yTimeout))
+          ]).catch((e) => logger.warn(`A11y Audit status: ${e.message}`));
           
           const candidates = await amazon.getProductCandidates();
           if (candidates.length === 0) {
@@ -56,12 +63,6 @@ test.describe("Amazon Product Workflow - Enterprise Suite", () => {
             await amazon.waitForProductPage();
             await page.waitForTimeout(2000); // Allow dynamic price elements to stabilize
             
-            // Mandatory Accessibility Audit - wrapped in timeout to prevent hangs
-            const a11yTimeout = 45000;
-            await Promise.race([
-              runA11yAudit(page, data.label, term),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("A11y Audit Timeout")), a11yTimeout))
-            ]).catch((e) => logger.warn(`A11y Audit status: ${e.message}`));
 
             const price = await amazon.getPrice();
             if (!price) {
