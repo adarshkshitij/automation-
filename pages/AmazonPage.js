@@ -49,92 +49,141 @@ class AmazonPage {
   async searchProduct(term) {
     const searchUrl = `${this.url}s?k=${encodeURIComponent(term)}`;
     console.log(`[Search] Navigating to: ${searchUrl}`);
-    await this.page.goto(searchUrl, { waitUntil: "commit", timeout: 30000 });
-    await this.page.waitForSelector("#nav-logo, [data-component-type='s-search-result']", { timeout: 15000 }).catch(() => {});
+    
+    // Retry search navigation up to 2 times for flaky network
+    for (let i = 0; i < 2; i++) {
+      try {
+        await this.page.goto(searchUrl, { waitUntil: "commit", timeout: 60000 });
+        await this.page.waitForSelector("#nav-logo, [data-component-type='s-search-result']", { timeout: 20000 }).catch(() => {});
+        break;
+      } catch (e) {
+        if (i === 1) throw e;
+        console.warn(`[Search] Attempt ${i + 1} failed, retrying search...`);
+        await this.page.waitForTimeout(3000);
+      }
+    }
     await this.handleInterstitials();
   }
 
   async ensureUsLocation(force = false) {
-    const maxRetries = 2;
+    const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        await this.handleInterstitials();
+        
         // Check for CAPTCHA
         const captcha = await this.page.locator('input#captchacharacters, #captchacharacters').isVisible().catch(() => false);
         if (captcha) {
           console.error("[Location] CAPTCHA detected! Automation blocked.");
-          await this.page.screenshot({ path: `test-results/captcha-detected-${Date.now()}.png` });
           throw new Error("CAPTCHA detected");
         }
 
-        // Wait for any part of the header to appear
-        const headerFound = await this.page.waitForSelector("#nav-global-location-slot, #nav-main, #nav-logo, #twotabsearchtextbox", { state: "attached", timeout: 30000 }).catch(async (e) => {
-          console.error("[Location] Header elements not found. Current URL:", this.page.url());
-          const content = await this.page.content();
-          console.log("[Location] Page content snippet:", content.substring(0, 800));
-          await this.page.screenshot({ path: `test-results/header-timeout-${Date.now()}.png` });
-          throw e;
-        });
+        // Wait for header to be stable and have text
+        const locationSlot = this.page.locator("#nav-global-location-slot");
+        await locationSlot.waitFor({ state: "visible", timeout: 20000 });
         
-        await this.handleInterstitials();
-
-        const locationText = await this.page.locator("#glow-ingress-line2").textContent().catch(() => "");
+        // Wait up to 5s for the text to actually appear
+        let locationText = "";
+        for (let i = 0; i < 5; i++) {
+          locationText = await locationSlot.textContent().catch(() => "");
+          if (locationText.trim().length > 5) break;
+          await this.page.waitForTimeout(1000);
+        }
+        
         console.log(`[Location] Attempt ${attempt}: Current detected: "${locationText.trim()}"`);
         
-        if (!force && (locationText.includes("10001") || locationText.includes("New York"))) {
+        const isUs = locationText.includes("10001") || 
+                     locationText.includes("New York") || 
+                     (locationText.includes("United States") && !locationText.includes("India"));
+
+        if (!force && isUs) {
           console.log("[Location] Location is already correct.");
           return;
         }
 
-        console.log("[Location] Setting delivery location to US (10001)...");
-        // Click specifically the link that triggers the popover
-        const trigger = this.page.locator("#nav-global-location-popover-link").first();
-        await trigger.click({ timeout: 8000 }).catch(async () => {
-          console.warn("[Location] Primary trigger failed, trying fallback...");
-          return this.page.locator(this.locationSlot).click({ timeout: 5000 });
-        });
+        console.log("[Location] Triggering location popover...");
+        const triggers = [
+          "#nav-global-location-popover-link", 
+          "#nav-global-location-slot", 
+          "#glow-ingress-block", 
+          "span.nav-line-2:has-text('Deliver to')",
+          "button:has-text('Change Address')"
+        ];
+        let triggered = false;
+        for (const t of triggers) {
+          try {
+            const trigger = this.page.locator(t).first();
+            if (await trigger.isVisible({ timeout: 2000 })) {
+              console.log(`[Location] Clicking trigger: ${t}`);
+              await trigger.click({ force: true, timeout: 5000 });
+              triggered = true;
+              break;
+            }
+          } catch (e) { continue; }
+        }
         
-        // Amazon sometimes shows a 'Change' link if a location is already cached
+        if (!triggered) throw new Error("Could not click location trigger");
+
+        // Wait for popover to be visible
+        await this.page.waitForSelector(".a-popover-modal, #a-popover-content-1", { timeout: 10000 });
+        
+        // Check if we need to click "Change" to see the zip input
         const changeLink = this.page.locator('#GLUXChangePostalCodeLink').first();
-        if (await changeLink.isVisible({ timeout: 3000 })) {
+        if (await changeLink.isVisible({ timeout: 2000 })) {
+          console.log("[Location] Clicking Change link to expose zip input...");
           await changeLink.click();
         }
 
-        // Wait for popover and input
-        await this.page.waitForSelector(this.zipInput, { state: "visible", timeout: 10000 });
-        const input = this.page.locator(this.zipInput).first();
-        await input.fill("10001");
+        const zipInput = this.page.locator(this.zipInput).first();
+        await zipInput.waitFor({ state: "visible", timeout: 10000 });
         
-        // Click 'Apply' button
-        const applyBtn = this.page.locator('#GLUXZipUpdate, input[aria-labelledby="GLUXZipUpdate-announce"]').first();
-        await applyBtn.click();
+        await zipInput.fill("10001");
+        await this.page.waitForTimeout(500);
         
-        // CRITICAL: Wait for the Done button and click it to trigger refresh
-        const doneBtn = this.page.locator('button[name="glowDoneButton"], #a-autoid-1-announce, #GLUXConfirmClose, .a-popover-footer input.a-button-input').first();
-        await doneBtn.waitFor({ state: "visible", timeout: 10000 }).catch(() => {
-          console.warn("[Location] Done button not found, maybe it auto-dismissed?");
-        });
+        // Extended update selectors
+        const updateBtn = this.page.locator('#GLUXZipUpdate, input[aria-labelledby="GLUXZipUpdate-announce"], #GLUXZipUpdate input').first();
+        await updateBtn.click({ timeout: 5000 });
         
-        if (await doneBtn.isVisible()) {
+        console.log("[Location] Zip applied, waiting for popover update...");
+        await this.page.waitForTimeout(3000);
+
+        // Click Done/Continue to finalize
+        const doneBtn = this.page.locator('button[name="glowDoneButton"], #a-autoid-1-announce, #GLUXConfirmClose, .a-popover-footer button:has-text("Done"), .a-popover-footer button:has-text("Continue")').first();
+        if (await doneBtn.isVisible({ timeout: 5000 })) {
+          console.log("[Location] Clicking Done/Continue and reloading...");
           await doneBtn.click({ force: true });
+          await this.page.waitForTimeout(1000);
+          await this.page.reload({ waitUntil: "domcontentloaded" });
+        } else {
+          console.log("[Location] Done button not found, checking for auto-refresh...");
+          const midCheck = await this.page.locator("#nav-global-location-slot").textContent().catch(() => "");
+          if (midCheck.includes("10001") || midCheck.includes("New York")) {
+             await this.page.reload({ waitUntil: "domcontentloaded" });
+          }
         }
         
-        // Wait for reload or network idle
+        // Final stabilization and verification
         await this.page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
-        await this.page.waitForTimeout(4000); 
+        await this.page.waitForTimeout(5000); 
         
-        // Final verification
-        const finalCheck = await this.page.locator("#glow-ingress-line2").textContent().catch(() => "");
-        if (finalCheck.includes("10001") || finalCheck.includes("New York")) {
-          console.log("[Location] Successfully verified US location.");
+        const finalCheck = await this.page.locator("#nav-global-location-slot").textContent().catch(() => "");
+        console.log(`[Location] Final check: "${finalCheck.trim()}"`);
+        
+        if (finalCheck.includes("10001") || finalCheck.includes("New York") || finalCheck.includes("United States")) {
+          console.log("[Location] Verified US location successfully.");
           return;
         }
+        
+        console.warn(`[Location] Attempt ${attempt} did not stick, forcing reload...`);
+        await this.page.screenshot({ path: `test-results/location-failed-attempt-${attempt}.png` });
+        await this.page.reload({ waitUntil: "domcontentloaded" });
       } catch (e) {
-        console.warn(`[Location] Attempt ${attempt} failed: ${e.message}`);
-        await this.page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
-        await this.page.waitForTimeout(2000);
+        console.warn(`[Location] Attempt ${attempt} error: ${e.message}`);
+        await this.page.screenshot({ path: `test-results/location-error-attempt-${attempt}.png` });
+        await this.page.goto(this.url, { waitUntil: "domcontentloaded" }).catch(() => {});
       }
     }
-    throw new Error("Failed to set US location after multiple attempts");
+    throw new Error("Failed to set US location after maximum retries");
   }
 
   async getProductCandidates() {
@@ -163,11 +212,14 @@ class AmazonPage {
 
   async getPrice() {
     for (const selector of this.priceSelectors) {
-      const text = await this.page.locator(selector).first().textContent().catch(() => null);
-      if (text) {
-        // More robust price matching for USD and INR
-        const match = text.replace(/\s+/g, "").match(/(?:\$|INR|USD|Rs\.?)\s?[\d,]+(?:\.\d{2})?/i);
-        if (match) return match[0];
+      const locator = this.page.locator(selector).first();
+      if (await locator.isVisible({ timeout: 1000 })) {
+        const text = await locator.textContent().catch(() => null);
+        if (text) {
+          // More robust price matching for USD and INR
+          const match = text.replace(/\s+/g, "").match(/(?:\$|INR|USD|Rs\.?)\s?[\d,]+(?:\.\d{2})?/i);
+          if (match) return match[0];
+        }
       }
     }
     return null;
@@ -239,11 +291,21 @@ class AmazonPage {
     let cartPrice = "";
     const selectors = this.cartItemPriceSelector.split(",").map(s => s.trim());
     for (const selector of selectors) {
-      cartPrice = await this.page.locator(selector).first().textContent().catch(() => "");
-      if (cartPrice && cartPrice.trim()) break;
+      const locator = this.page.locator(selector).first();
+      if (await locator.isVisible({ timeout: 3000 })) {
+        cartPrice = await locator.textContent().catch(() => "");
+        if (cartPrice && cartPrice.trim()) {
+          // Robust price matching: extract first valid currency string to avoid duplicates
+          const match = cartPrice.replace(/\s+/g, "").match(/(?:\$|INR|USD|Rs\.?)\s?[\d,]+(?:\.\d{2})?/i);
+          if (match) {
+            cartPrice = match[0];
+            break;
+          }
+        }
+      }
     }
 
-    const cleanedCartPrice = cartPrice.replace(/\s+/g, "");
+    const cleanedCartPrice = cartPrice.trim();
     console.log(`[Verify] Cart Price detected: ${cleanedCartPrice} | Expected: ${expectedPrice}`);
     
     const numericExpected = expectedPrice.replace(/[^\d.]/g, "");
@@ -290,16 +352,32 @@ class AmazonPage {
       "#sp-cc-accept", 
       'button:has-text("No thanks")', 
       'button:has-text("Dismiss")',
+      'button:has-text("Not now")',
       '#attach-close_sideSheet-link',
       '.a-popover-header button[data-action="a-popover-close"]',
-      '#nav-flyout-accountList'
+      '#nav-flyout-accountList',
+      '.glow-toaster-button-dismiss input',
+      '.glow-toaster-button-submit input',
+      '#nav-main .a-button-inner input',
+      '#GLUXConfirmClose'
     ];
     for (const s of dismissSelectors) {
-      await this.page.locator(s).first().click({ timeout: 500 }).catch(() => {});
+      const locator = this.page.locator(s).first();
+      try {
+        if (await locator.isVisible({ timeout: 1200 })) {
+          await locator.click({ timeout: 3000 }).catch(() => {});
+        }
+      } catch (e) {}
     }
     
+    // Specifically handle "Stay on Amazon.com" vs "Go to Amazon.in"
+    const stayOnCom = this.page.locator('span.a-button-text:has-text("Stay on amazon.com"), button:has-text("Stay on amazon.com"), .a-button-inner:has-text("Stay on amazon.com")').first();
+    if (await stayOnCom.isVisible({ timeout: 1500 })) {
+      await stayOnCom.click().catch(() => {});
+    }
+
     const signInPopover = this.page.locator('#nav-signin-tooltip').first();
-    if (await signInPopover.isVisible()) {
+    if (await signInPopover.isVisible({ timeout: 1000 })) {
        await this.page.mouse.move(0,0);
     }
   }

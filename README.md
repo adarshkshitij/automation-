@@ -7,12 +7,10 @@ Professional automation suite developed for the **TestMu AI (LambdaTest) Custome
 This suite is built using **Playwright (JavaScript)** and follows the **Page Object Model (POM)** pattern to ensure scalability and maintainability.
 
 ### Key Engineering Features:
-*   **Parallel Execution**: Configured for 4 concurrent workers to maximize throughput.
-*   **Multi-Candidate Search Strategy**: Intelligent search algorithm that bypasses Amazon's regional inventory restrictions by evaluating multiple product candidates.
-*   **Deep Cart Verification**: Navigates to the cart page to verify product persistence and price accuracy.
-*   **Automated Accessibility (A11y)**: Integrated `@axe-core/playwright` to perform non-blocking WCAG 2.1 compliance audits.
-*   **Resilient Recovery**: Handles location popups and cookie consents using a custom recovery handler.
-*   **GitHub Actions CI/CD**: Automated testing on every push to ensure code quality.
+*   **CI/CD Optimization**: Specialized logic for GitHub Actions environments, including automated popover dismissal and headless-friendly interactions.
+*   **Intelligent Location Recovery**: Smart session-based location forcing with automated page reloads if the UI gets "stuck" in an inconsistent state.
+*   **Flaky Network Resilience**: Implemented exponential backoff and retries for critical search and navigation steps to handle Amazon's high-traffic variability.
+*   **Non-Blocking Accessibility Audits**: Integrated `@axe-core/playwright` for WCAG 2.1 audits with configurable timeouts for slower CI runners.
 
 ## 📐 Design Decisions & Patterns
 

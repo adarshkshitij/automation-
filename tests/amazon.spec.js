@@ -57,10 +57,11 @@ test.describe("Amazon Product Workflow - Enterprise Suite", () => {
             await page.waitForTimeout(2000); // Allow dynamic price elements to stabilize
             
             // Mandatory Accessibility Audit - wrapped in timeout to prevent hangs
+            const a11yTimeout = 45000;
             await Promise.race([
               runA11yAudit(page, data.label, term),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("A11y Audit Timeout")), 15000))
-            ]).catch((e) => logger.warn(`A11y Audit skipped: ${e.message}`));
+              new Promise((_, reject) => setTimeout(() => reject(new Error("A11y Audit Timeout")), a11yTimeout))
+            ]).catch((e) => logger.warn(`A11y Audit status: ${e.message}`));
 
             const price = await amazon.getPrice();
             if (!price) {
