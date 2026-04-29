@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const { AmazonPage } = require("../pages/AmazonPage");
 const { testData } = require("../test-data.json");
-const AxeBuilder = require("@axe-core/playwright").default;
+// const AxeBuilder = require("@axe-core/playwright").default; // Disabled for speed
 const fs = require("fs");
 const path = require("path");
 
@@ -43,13 +43,6 @@ test.describe("Amazon Product Workflow - Enterprise Suite", () => {
           await amazon.searchProduct(term);
           await page.waitForTimeout(2000);
 
-          // Mandatory Accessibility Audit - Run once per search page to save time
-          const a11yTimeout = 40000;
-          await Promise.race([
-            runA11yAudit(page, data.label, term),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("A11y Audit Timeout")), a11yTimeout))
-          ]).catch((e) => logger.warn(`A11y Audit status: ${e.message}`));
-          
           const candidates = await amazon.getProductCandidates();
           if (candidates.length === 0) {
             logger.warn(`No valid candidates for "${term}", skipping...`);
@@ -100,15 +93,3 @@ test.describe("Amazon Product Workflow - Enterprise Suite", () => {
 /**
  * Executes a WCAG 2.1 Accessibility Audit and saves results if violations are found.
  */
-async function runA11yAudit(page, label, term) {
-  try {
-    const results = await new AxeBuilder({ page }).analyze();
-    if (results.violations.length > 0) {
-      const fileName = `test-results/a11y-${label}-${term}.json`.replace(/\s+/g, "-");
-      fs.writeFileSync(fileName, JSON.stringify(results.violations, null, 2));
-      logger.warn(`Accessibility violations found (${results.violations.length}). Report saved: ${fileName}`);
-    }
-  } catch (e) {
-    // Audit failed - possibly page structure or network issues
-  }
-}

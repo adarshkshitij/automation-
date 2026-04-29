@@ -40,7 +40,7 @@ class AmazonPage {
       await this.page.waitForSelector("#nav-logo, #nav-global-location-slot", { timeout: 15000 });
     } catch (e) {
       console.warn(`[Navigate] Entry URL commit failed (${e.message}), trying homepage...`);
-      await this.page.goto(this.url, { waitUntil: "commit", timeout: 20000 });
+      await this.page.goto(this.url, { waitUntil: "domcontentloaded", timeout: 20000 });
       await this.page.waitForSelector("#nav-logo", { timeout: 10000 }).catch(() => {});
     }
     await this.handleInterstitials();
@@ -53,8 +53,8 @@ class AmazonPage {
     // Retry search navigation up to 2 times for flaky network
     for (let i = 0; i < 2; i++) {
       try {
-        await this.page.goto(searchUrl, { waitUntil: "commit", timeout: 60000 });
-        await this.page.waitForSelector("#nav-logo, [data-component-type='s-search-result']", { timeout: 20000 }).catch(() => {});
+        await this.page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await this.page.waitForSelector("#nav-logo, [data-component-type='s-search-result']", { timeout: 15000 }).catch(() => {});
         break;
       } catch (e) {
         if (i === 1) throw e;
@@ -66,7 +66,7 @@ class AmazonPage {
   }
 
   async ensureUsLocation(force = false) {
-    const maxRetries = 3;
+    const maxRetries = 1;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         await this.handleInterstitials();
@@ -163,8 +163,9 @@ class AmazonPage {
         }
         
         // Final stabilization and verification
-        await this.page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
-        await this.page.waitForTimeout(5000); 
+        // Final stabilization
+        await this.page.waitForLoadState("load", { timeout: 5000 }).catch(() => {});
+        await this.page.waitForTimeout(2000); 
         
         const finalCheck = await this.page.locator("#nav-global-location-slot").textContent().catch(() => "");
         console.log(`[Location] Final check: "${finalCheck.trim()}"`);
