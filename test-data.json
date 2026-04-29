@@ -1,11 +1,11 @@
 {
   "testData": [
     {
-      "searchTerms": ["iPhone 15", "iPhone 14", "iPhone"],
+      "searchTerms": ["iPhone 15 unlocked", "iPhone 14 unlocked", "iPhone 13 unlocked"],
       "label": "Case 1"
     },
     {
-      "searchTerms": ["Samsung Galaxy S24", "Samsung Galaxy S23", "Galaxy"],
+      "searchTerms": ["Samsung Galaxy S24 unlocked", "Samsung Galaxy S23 unlocked", "Galaxy S22 unlocked"],
       "label": "Case 2"
     }
   ]

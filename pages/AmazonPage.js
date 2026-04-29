@@ -29,76 +29,112 @@ class AmazonPage {
     ];
 
     this.cartUrl = "https://www.amazon.com/gp/cart/view.html";
-    this.cartItemPriceSelector = ".sc-product-price, .sc-subtotal-amount .a-price .a-offscreen";
+    this.cartItemPriceSelector = ".sc-product-price, #sc-subtotal-amount-buybox .sc-price, .sc-subtotal-amount .a-price .a-offscreen, .sc-price";
   }
 
   async navigate() {
-    await this.page.goto(this.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    const entryUrl = "https://www.amazon.com/dp/B0CMPMY9ZZ"; 
+    console.log(`[Navigate] Going to entry URL: ${entryUrl}`);
+    try {
+      await this.page.goto(entryUrl, { waitUntil: "commit", timeout: 30000 });
+      await this.page.waitForSelector("#nav-logo, #nav-global-location-slot", { timeout: 15000 });
+    } catch (e) {
+      console.warn(`[Navigate] Entry URL commit failed (${e.message}), trying homepage...`);
+      await this.page.goto(this.url, { waitUntil: "commit", timeout: 20000 });
+      await this.page.waitForSelector("#nav-logo", { timeout: 10000 }).catch(() => {});
+    }
     await this.handleInterstitials();
   }
 
   async searchProduct(term) {
     const searchUrl = `${this.url}s?k=${encodeURIComponent(term)}`;
-    await this.page.goto(searchUrl, { waitUntil: "domcontentloaded" });
+    console.log(`[Search] Navigating to: ${searchUrl}`);
+    await this.page.goto(searchUrl, { waitUntil: "commit", timeout: 30000 });
+    await this.page.waitForSelector("#nav-logo, [data-component-type='s-search-result']", { timeout: 15000 }).catch(() => {});
     await this.handleInterstitials();
-    
-    await this.page.waitForSelector('[data-component-type="s-search-result"]', { timeout: 15000 }).catch(() => {});
   }
 
   async ensureUsLocation(force = false) {
-    try {
-      const locationText = await this.page.locator(this.locationSlot).textContent().catch(() => "");
-      console.log(`[Location] Current detected: "${locationText.trim().replace(/\s+/g, ' ')}"`);
-      
-      if (!force && (locationText.includes("10001") || locationText.includes("New York"))) {
-        return;
-      }
+    const maxRetries = 2;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Check for CAPTCHA
+        const captcha = await this.page.locator('input#captchacharacters, #captchacharacters').isVisible().catch(() => false);
+        if (captcha) {
+          console.error("[Location] CAPTCHA detected! Automation blocked.");
+          await this.page.screenshot({ path: `test-results/captcha-detected-${Date.now()}.png` });
+          throw new Error("CAPTCHA detected");
+        }
 
-      console.log("[Location] Setting delivery location to US (10001)...");
-      await this.page.locator(this.locationSlot).click({ timeout: 5000 }).catch(() => {
-        return this.page.locator("#nav-global-location-slot span.nav-line-2").click({ timeout: 3000 });
-      });
-      
-      // Amazon sometimes shows a 'Change' link if a location is already cached
-      const changeLink = this.page.locator('#GLUXChangePostalCodeLink').first();
-      if (await changeLink.isVisible({ timeout: 2000 })) {
-        await changeLink.click();
-      }
+        // Wait for any part of the header to appear
+        const headerFound = await this.page.waitForSelector("#nav-global-location-slot, #nav-main, #nav-logo, #twotabsearchtextbox", { state: "attached", timeout: 30000 }).catch(async (e) => {
+          console.error("[Location] Header elements not found. Current URL:", this.page.url());
+          const content = await this.page.content();
+          console.log("[Location] Page content snippet:", content.substring(0, 800));
+          await this.page.screenshot({ path: `test-results/header-timeout-${Date.now()}.png` });
+          throw e;
+        });
+        
+        await this.handleInterstitials();
 
-      // Wait for popover and input
-      await this.page.waitForSelector(this.zipInput, { state: "visible", timeout: 8000 });
-      const input = this.page.locator(this.zipInput).first();
-      await input.fill("10001");
-      
-      // Try clicking 'Apply' button specifically
-      const applyBtn = this.page.locator('input[aria-labelledby="GLUXZipUpdate-announce"], #GLUXZipUpdate').first();
-      if (await applyBtn.isVisible()) {
+        const locationText = await this.page.locator("#glow-ingress-line2").textContent().catch(() => "");
+        console.log(`[Location] Attempt ${attempt}: Current detected: "${locationText.trim()}"`);
+        
+        if (!force && (locationText.includes("10001") || locationText.includes("New York"))) {
+          console.log("[Location] Location is already correct.");
+          return;
+        }
+
+        console.log("[Location] Setting delivery location to US (10001)...");
+        // Click specifically the link that triggers the popover
+        const trigger = this.page.locator("#nav-global-location-popover-link").first();
+        await trigger.click({ timeout: 8000 }).catch(async () => {
+          console.warn("[Location] Primary trigger failed, trying fallback...");
+          return this.page.locator(this.locationSlot).click({ timeout: 5000 });
+        });
+        
+        // Amazon sometimes shows a 'Change' link if a location is already cached
+        const changeLink = this.page.locator('#GLUXChangePostalCodeLink').first();
+        if (await changeLink.isVisible({ timeout: 3000 })) {
+          await changeLink.click();
+        }
+
+        // Wait for popover and input
+        await this.page.waitForSelector(this.zipInput, { state: "visible", timeout: 10000 });
+        const input = this.page.locator(this.zipInput).first();
+        await input.fill("10001");
+        
+        // Click 'Apply' button
+        const applyBtn = this.page.locator('#GLUXZipUpdate, input[aria-labelledby="GLUXZipUpdate-announce"]').first();
         await applyBtn.click();
-      } else {
-        await this.page.keyboard.press("Enter");
+        
+        // CRITICAL: Wait for the Done button and click it to trigger refresh
+        const doneBtn = this.page.locator('button[name="glowDoneButton"], #a-autoid-1-announce, #GLUXConfirmClose, .a-popover-footer input.a-button-input').first();
+        await doneBtn.waitFor({ state: "visible", timeout: 10000 }).catch(() => {
+          console.warn("[Location] Done button not found, maybe it auto-dismissed?");
+        });
+        
+        if (await doneBtn.isVisible()) {
+          await doneBtn.click({ force: true });
+        }
+        
+        // Wait for reload or network idle
+        await this.page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+        await this.page.waitForTimeout(4000); 
+        
+        // Final verification
+        const finalCheck = await this.page.locator("#glow-ingress-line2").textContent().catch(() => "");
+        if (finalCheck.includes("10001") || finalCheck.includes("New York")) {
+          console.log("[Location] Successfully verified US location.");
+          return;
+        }
+      } catch (e) {
+        console.warn(`[Location] Attempt ${attempt} failed: ${e.message}`);
+        await this.page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
+        await this.page.waitForTimeout(2000);
       }
-      
-      // Wait for 'Done' or 'Continue' or the popover to close
-      const doneBtn = this.page.locator('button[name="glowDoneButton"], #GLUXConfirmClose, .a-button-focus .a-button-text:has-text("Done")').first();
-      await doneBtn.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
-      if (await doneBtn.isVisible()) {
-        await doneBtn.click({ force: true }).catch(() => {});
-      }
-      
-      // Allow time for the page to refresh or background update
-      await this.page.waitForLoadState("networkidle").catch(() => {});
-      await this.page.waitForTimeout(2000); 
-      
-      // Verify update in the UI
-      const updatedText = await this.page.locator(this.locationSlot).textContent().catch(() => "");
-      if (updatedText.includes("10001") || updatedText.includes("New York")) {
-        console.log("[Location] Successfully updated to US.");
-      } else {
-        console.warn("[Location] Update might have failed, UI still shows:", updatedText.trim());
-      }
-    } catch (e) {
-      console.warn(`[Location] Process failed: ${e.message}`);
     }
+    throw new Error("Failed to set US location after multiple attempts");
   }
 
   async getProductCandidates() {
@@ -118,7 +154,8 @@ class AmazonPage {
                            titleLower.includes("cable") || 
                            titleLower.includes("charger") ||
                            titleLower.includes("adapter") ||
-                           titleLower.includes("belt clip");
+                           titleLower.includes("belt clip") ||
+                           titleLower.includes("battery");
         return item.url && item.url.includes("/dp/") && !isSpam && !isAccessory;
       });
     });
@@ -128,6 +165,7 @@ class AmazonPage {
     for (const selector of this.priceSelectors) {
       const text = await this.page.locator(selector).first().textContent().catch(() => null);
       if (text) {
+        // More robust price matching for USD and INR
         const match = text.replace(/\s+/g, "").match(/(?:\$|INR|USD|Rs\.?)\s?[\d,]+(?:\.\d{2})?/i);
         if (match) return match[0];
       }
@@ -136,14 +174,26 @@ class AmazonPage {
   }
 
   async addToCart() {
-    const buyingOptionsBtn = this.page.locator('#buybox-see-all-buying-choices, #buybox-see-all-buying-choices-announce').first();
+    const buyingOptionsBtn = this.page.locator('#buybox-see-all-buying-choices, #buybox-see-all-buying-choices-announce, a:has-text("See All Buying Options")').first();
+    
     if (await buyingOptionsBtn.isVisible({ timeout: 3000 })) {
       console.log("[Cart] Found 'See All Buying Options', clicking...");
       await buyingOptionsBtn.click();
       
-      const sideAddToCart = this.page.locator('input[name="submit.addToCart"], [aria-labelledby="a-autoid-0-announce"] input, #a-autoid-0-announce').first();
-      await sideAddToCart.waitFor({ state: "visible", timeout: 10000 });
-      await sideAddToCart.click();
+      // Wait for side panel or new page
+      const sideAddToCart = this.page.locator('#a-popover-content-1 input[name="submit.addToCart"], .a-side-sheet input[name="submit.addToCart"], #a-autoid-0-announce input').first();
+      await sideAddToCart.waitFor({ state: "visible", timeout: 10000 }).catch(() => {
+        console.warn("[Cart] Side panel Add to Cart not found, checking if it navigated...");
+      });
+      
+      if (await sideAddToCart.isVisible()) {
+        await sideAddToCart.click();
+      } else {
+        // Fallback for when 'See All Buying Options' leads to a new page
+        await this.page.locator('input[name="submit.add-to-cart"]').first().click({ timeout: 5000 }).catch(() => {
+          throw new Error("Could not find Add to Cart button in Buying Options");
+        });
+      }
     } else {
       let btn = null;
       for (const selector of this.addToCartSelectors) {
@@ -175,13 +225,26 @@ class AmazonPage {
   }
 
   async verifyCartContents(expectedPrice) {
-    await this.page.goto(this.cartUrl, { waitUntil: "networkidle" });
-    const isEmpty = await this.page.locator("#sc-active-cart :has-text('Your Amazon Cart is empty')").isVisible().catch(() => false);
-    if (isEmpty) throw new Error("Cart is empty after 'Add to Cart' action");
+    console.log("[Verify] Navigating to cart...");
+    await this.page.goto(this.cartUrl, { waitUntil: "load", timeout: 30000 });
+    await this.handleInterstitials();
+    
+    const isEmpty = await this.page.locator("#sc-active-cart :has-text('Your Amazon Cart is empty')").isVisible({ timeout: 5000 }).catch(() => false);
+    if (isEmpty) {
+      console.warn("[Verify] Cart appears empty. Taking diagnostic screenshot...");
+      await this.page.screenshot({ path: `test-results/empty-cart-${Date.now()}.png` });
+      throw new Error("Cart is empty after 'Add to Cart' action");
+    }
 
-    const cartPrice = await this.page.locator(this.cartItemPriceSelector).first().textContent().catch(() => "");
+    let cartPrice = "";
+    const selectors = this.cartItemPriceSelector.split(",").map(s => s.trim());
+    for (const selector of selectors) {
+      cartPrice = await this.page.locator(selector).first().textContent().catch(() => "");
+      if (cartPrice && cartPrice.trim()) break;
+    }
+
     const cleanedCartPrice = cartPrice.replace(/\s+/g, "");
-    console.log(`[Verify] Cart Price: ${cleanedCartPrice} | Expected: ${expectedPrice}`);
+    console.log(`[Verify] Cart Price detected: ${cleanedCartPrice} | Expected: ${expectedPrice}`);
     
     const numericExpected = expectedPrice.replace(/[^\d.]/g, "");
     const numericCart = cleanedCartPrice.replace(/[^\d.]/g, "");
@@ -191,16 +254,53 @@ class AmazonPage {
     return cleanedCartPrice;
   }
 
+  async clearCart() {
+    console.log("[Cart] Clearing cart for fresh start...");
+    await this.page.goto(this.cartUrl, { waitUntil: "load" });
+    await this.handleInterstitials();
+    
+    const deleteBtns = this.page.locator('input[value="Delete"], .sc-action-delete input');
+    const count = await deleteBtns.count();
+    for (let i = 0; i < count; i++) {
+      await deleteBtns.first().click().catch(() => {});
+      await this.page.waitForTimeout(1000);
+    }
+  }
+
+  async waitForProductPage() {
+    console.log("[PDP] Waiting for product details to load...");
+    await this.page.waitForSelector("#productTitle, #add-to-cart-button, #corePrice_feature_div", { state: "attached", timeout: 20000 }).catch(() => {
+      console.warn("[PDP] Key elements not found, checking if page is blank...");
+    });
+    
+    // Handle the "blank body" transient state subagent found
+    const isBlank = await this.page.evaluate(() => document.body.innerText.length < 200);
+    if (isBlank) {
+      console.log("[PDP] Page appears blank, refreshing...");
+      await this.page.reload({ waitUntil: "domcontentloaded" });
+      await this.page.waitForTimeout(3000);
+    }
+    
+    await this.handleInterstitials();
+  }
+
   async handleInterstitials() {
     const dismissSelectors = [
       'input[name="accept"]', 
       "#sp-cc-accept", 
       'button:has-text("No thanks")', 
       'button:has-text("Dismiss")',
-      '#attach-close_sideSheet-link'
+      '#attach-close_sideSheet-link',
+      '.a-popover-header button[data-action="a-popover-close"]',
+      '#nav-flyout-accountList'
     ];
     for (const s of dismissSelectors) {
       await this.page.locator(s).first().click({ timeout: 500 }).catch(() => {});
+    }
+    
+    const signInPopover = this.page.locator('#nav-signin-tooltip').first();
+    if (await signInPopover.isVisible()) {
+       await this.page.mouse.move(0,0);
     }
   }
 }

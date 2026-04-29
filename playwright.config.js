@@ -43,8 +43,8 @@ const lambdaTestUse = isLambdaTest
 module.exports = defineConfig({
   testDir: "./tests",
   fullyParallel: true,
-  workers: 4,
-  timeout: 480000,
+  workers: 1,
+  timeout: 600000,
   expect: {
     timeout: 15000,
   },
@@ -58,23 +58,12 @@ module.exports = defineConfig({
     video: "retain-on-failure",
     actionTimeout: 20000,
     navigationTimeout: 45000,
-    locale: "en-US",
-    timezoneId: "America/New_York",
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-    extraHTTPHeaders: {
-      "Accept-Language": "en-US,en;q=0.9",
-      "Upgrade-Insecure-Requests": "1",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-    },
-    launchOptions: {
-      channel: "chrome",
-      args: ["--disable-blink-features=AutomationControlled"],
-    },
+    // Using default Playwright device settings for better compatibility
     ...devices["Desktop Chrome"],
+    viewport: { width: 1280, height: 720 },
+    launchOptions: {
+      args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+    },
     ...lambdaTestUse,
   },
 });

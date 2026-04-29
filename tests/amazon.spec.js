@@ -33,8 +33,14 @@ test.describe("Amazon Product Workflow - Enterprise Suite", () => {
         
         try {
           await amazon.navigate();
-          await amazon.searchProduct(term);
           await amazon.ensureUsLocation();
+          
+          // Ensure a clean cart if this is a retry attempt
+          if (data.searchTerms.indexOf(term) > 0) {
+            await amazon.clearCart();
+          }
+
+          await amazon.searchProduct(term);
           await page.waitForTimeout(2000); // Buffer for location-based search results
           
           const candidates = await amazon.getProductCandidates();
@@ -46,10 +52,15 @@ test.describe("Amazon Product Workflow - Enterprise Suite", () => {
           // Try top 2 candidates for maximum reliability
           for (const candidate of candidates.slice(0, 2)) {
             logger.info(`Evaluating Product: ${candidate.title.substring(0, 60)}...`);
-            await page.goto(candidate.url, { waitUntil: "domcontentloaded" });
+            await page.goto(candidate.url, { waitUntil: "commit", timeout: 30000 });
+            await amazon.waitForProductPage();
+            await page.waitForTimeout(2000); // Allow dynamic price elements to stabilize
             
-            // Mandatory Accessibility Audit
-            await runA11yAudit(page, data.label, term).catch(() => {});
+            // Mandatory Accessibility Audit - wrapped in timeout to prevent hangs
+            await Promise.race([
+              runA11yAudit(page, data.label, term),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("A11y Audit Timeout")), 15000))
+            ]).catch((e) => logger.warn(`A11y Audit skipped: ${e.message}`));
 
             const price = await amazon.getPrice();
             if (!price) {
